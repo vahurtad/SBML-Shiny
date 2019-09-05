@@ -1,17 +1,15 @@
-#
-# This is a Shiny web application. You can run the application by clicking
-# the 'Run App' button above.
-#
-# Find out more about building applications with Shiny here:
-#
-#    http://shiny.rstudio.com/
-#
-
 library(shiny)
+library(DT)
 library(httr)
+library(XML)
+library(xml2)
+library(RCurl)
+library(dplyr)
+library(shinythemes)
 
+#------------------
 
-getSBML <- function(modelID){
+downloadSBML <- function(modelID){
     biomodels <- "https://www.ebi.ac.uk/biomodels/model/download"
     url <- paste(biomodels,modelID, sep = "/")
     print(url)
@@ -24,48 +22,64 @@ getSBML <- function(modelID){
     return(result)
 }
 
-getSBML("BIOMD0000000002")
-library(XML)
 
-xml_parse <- xmlParse(paste(getwd(),"temp.xml",sep="/"))
-#xmlToList(xml_parse)
-#xmlRoot(xml_parse)
+getSBML <-function(modelID){
+
+    biomodels <- "https://www.ebi.ac.uk/biomodels/model/download"
+    url <- paste(biomodels,modelID, sep = "/")
+    xData <- getURL(paste(paste(url,"filename=",sep = "?"),modelID,'_url.xml',sep=""))
+    #xml_out <- xmlParse(xData)
+    pg <- read_xml(xData)
+    xml_ns_strip(pg)
+    
+    # get all the <species>
+    all_children <- xml_child(pg,search=1)
+    species <- xml_find_all(all_children, "//species")
+
+    # extract and clean 
+    species_text <- trimws(xml_text(species))
+    species_name <- xml_attr(species, "name")
+    species_id <- xml_attr(species, "id")
+    species_initialAmount <- xml_attr(species, "initialAmount")
+    
+    species <- tibble(text = species_text ,name = species_name ,id = species_id, initialAmount = species_initialAmount)
+    return(species)
+}
 
 
-# Define UI for application that draws a histogram
+#---------------------
+
+# Define UI for application 
 ui <- fluidPage(
-
+    theme = shinytheme("slate"),
     # Application title
-    titlePanel("Old Faithful Geyser Data"),
+    titlePanel("SBML"),
 
-    # Sidebar with a slider input for number of bins 
     sidebarLayout(
         sidebarPanel(
-            sliderInput("bins",
-                        "Number of bins:",
-                        min = 1,
-                        max = 50,
-                        value = 30)
+            textInput("modelID","Input SBML Model:","BIOMD0000000002")
         ),
-
-        # Show a plot of the generated distribution
         mainPanel(
-           plotOutput("distPlot")
+            'Showing for: ',
+            textOutput("xml_file_name"),
+            dataTableOutput("xml_output")
         )
     )
 )
 
 # Define server logic required to draw a histogram
 server <- function(input, output) {
-
-    output$distPlot <- renderPlot({
-        # generate bins based on input$bins from ui.R
-        x    <- faithful[, 2]
-        bins <- seq(min(x), max(x), length.out = input$bins + 1)
-
-        # draw the histogram with the specified number of bins
-        hist(x, breaks = bins, col = 'darkgray', border = 'white')
+    data <- reactive({
+        if(input$modelID == ""){
+            data <- "Need Model ID"
+        } else {
+          data <- input$modelID
+        }
     })
+
+    output$xml_file_name <- renderText(data())
+    
+    output$xml_output <- renderDataTable({datatable(getSBML(input$modelID))})
 }
 
 # Run the application 
