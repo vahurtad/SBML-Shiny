@@ -6,6 +6,7 @@ library(xml2)
 library(RCurl)
 library(dplyr)
 library(shinythemes)
+library(shinydashboard)
 
 #------------------
 
@@ -23,7 +24,7 @@ downloadSBML <- function(modelID){
 }
 
 
-getSBML <-function(modelID){
+getSBML <- function(modelID){
 
     biomodels <- "https://www.ebi.ac.uk/biomodels/model/download"
     url <- paste(biomodels,modelID, sep = "/")
@@ -34,38 +35,86 @@ getSBML <-function(modelID){
     
     # get all the <species>
     all_children <- xml_child(pg,search=1)
-    species <- xml_find_all(all_children, "//species")
+    return(all_children)
+}
 
+getParameters <- function(model){
+    
+    param <- xml_find_all(model, "//parameter")
+    
     # extract and clean 
-    species_text <- trimws(xml_text(species))
+    param_text <- trimws(xml_text(param))
+    param_name <- xml_attr(param, "name")
+    param_id <- xml_attr(param, "id")
+    param_value <- xml_attr(param, "value")
+    
+    species <- tibble(text = param_text ,name = param_name ,id = param_id, value = param_value)
+    return(species)
+}
+
+getSpecies <- function(model){
+    
+    species <- xml_find_all(model, "//species")
+    
+    # extract and clean
     species_name <- xml_attr(species, "name")
     species_id <- xml_attr(species, "id")
     species_initialAmount <- xml_attr(species, "initialAmount")
     
-    species <- tibble(text = species_text ,name = species_name ,id = species_id, initialAmount = species_initialAmount)
+    species <- tibble(name = species_name ,id = species_id, initialAmount = species_initialAmount)
     return(species)
 }
 
-
 #---------------------
 
-# Define UI for application 
-ui <- fluidPage(
-    theme = shinytheme("slate"),
-    # Application title
-    titlePanel("SBML"),
+sidebar <- dashboardSidebar(
+    sidebarMenu(
+        textInput("modelID","Input SBML Model:","BIOMD0000000002"),
+        menuItem("model",tabName = 'model'),
+        menuItem('species', tabName = 'species'),
+        menuItem('parameter', tabName = 'param'),
+        menuItem('reaction', tabName = 'reaction'),
+        menuItem('ODE', tabName = 'ode')
+        
+    )
+)
 
-    sidebarLayout(
-        sidebarPanel(
-            textInput("modelID","Input SBML Model:","BIOMD0000000002")
+body <- dashboardBody(
+    
+    tabItems(
+        tabItem(tabName = "model",
+                'Showing for: ',
+                textOutput("xml_file_name")
         ),
-        mainPanel(
-            'Showing for: ',
-            textOutput("xml_file_name"),
-            dataTableOutput("xml_output")
+        
+        tabItem(tabName = "species",
+                h2("Species"),
+                dataTableOutput("xml_species")
+        ),
+        tabItem(tabName = "param",
+                h2("Parameters"),
+                dataTableOutput("xml_param")
+        ),
+        
+        tabItem(tabName = "reaction",
+                h2("Widgets tab content")
+               
+        ),
+        tabItem(tabName = "ode",
+                h2("Widgets tab content")
+                
         )
     )
 )
+
+# Define UI for application 
+ui <- dashboardPage(
+        dashboardHeader(title = "SBML UI."),
+        sidebar,
+        body
+    )
+    
+
 
 # Define server logic required to draw a histogram
 server <- function(input, output) {
@@ -76,10 +125,14 @@ server <- function(input, output) {
           data <- input$modelID
         }
     })
-
-    output$xml_file_name <- renderText(data())
+    model_data <- reactive(getSBML(input$modelID))
     
-    output$xml_output <- renderDataTable({datatable(getSBML(input$modelID))})
+    output$xml_file_name <- renderText(data())
+    output$xml_all <- model_data
+    render_all <- reactive(getSpecies(model_data))
+    output$xml_species <- renderDataTable({datatable(getSpecies(getSBML(input$modelID)))})
+    output$xml_param <- renderDataTable({datatable(getParameters(getSBML(input$modelID)))})
+    
 }
 
 # Run the application 
