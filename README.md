@@ -1,7 +1,7 @@
 # SBML UI
 Simple SBML UI for viewing XML files in tables 
 
-## Feature Features
+## Future Features
 * Show the ODEs and plot
 * All other variables
 
