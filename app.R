@@ -38,6 +38,15 @@ getSBML <- function(modelID){
     return(all_children)
 }
 
+getDescription <- function(model){
+    n <- xml_find_first(model, "//notes")
+    
+    # extract and clean 
+    notes <- trimws(xml_text(n))
+
+    return(notes)
+}
+
 getParameters <- function(model){
     
     param <- xml_find_all(model, "//parameter")
@@ -60,9 +69,9 @@ getSpecies <- function(model){
     species_name <- xml_attr(species, "name")
     species_id <- xml_attr(species, "id")
     species_initialAmount <- xml_attr(species, "initialAmount")
-    
+    count <- length(species_id)
     species <- tibble(name = species_name ,id = species_id, initialAmount = species_initialAmount)
-    return(species)
+    return(list("species" = species, "count" = count))
 }
 
 #---------------------
@@ -84,11 +93,13 @@ body <- dashboardBody(
     tabItems(
         tabItem(tabName = "model",
                 'Showing for: ',
-                textOutput("xml_file_name")
+                textOutput("xml_file_name"),
+                textOutput("xml_desc")
         ),
         
         tabItem(tabName = "species",
-                h2("Species"),
+                h2("Species"), 
+                'Species Count ',textOutput("species_count"),
                 dataTableOutput("xml_species")
         ),
         tabItem(tabName = "param",
@@ -116,7 +127,7 @@ ui <- dashboardPage(
     
 
 
-# Define server logic required to draw a histogram
+# Define server logic 
 server <- function(input, output) {
     data <- reactive({
         if(input$modelID == ""){
@@ -126,11 +137,14 @@ server <- function(input, output) {
         }
     })
     model_data <- reactive(getSBML(input$modelID))
-    
+    output$xml_desc <- reactive(getDescription(getSBML(input$modelID)))
     output$xml_file_name <- renderText(data())
     output$xml_all <- model_data
-    render_all <- reactive(getSpecies(model_data))
-    output$xml_species <- renderDataTable({datatable(getSpecies(getSBML(input$modelID)))})
+    render_all <- reactive(getSpecies(model_data)[1])
+   # output$species_count <- getSpecies(getSBML(input$modelID))[2]
+    output$xml_species <- renderDataTable({datatable(getSpecies(getSBML(input$modelID))$species)})
+    output$species_count <-reactive(getSpecies(getSBML(input$modelID))$count)
+    #output$xml_species <- renderDataTable({datatable(getSpecies(getSBML(input$modelID))[1])})
     output$xml_param <- renderDataTable({datatable(getParameters(getSBML(input$modelID)))})
     
 }
